@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
 	"fmt"
 	"io"
 
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/crypto/sha3"
 )
 
 const (
@@ -63,13 +66,70 @@ func Aes128GcmDec(key, iv, ct, ad []byte) ([]byte, error) {
 	return aesgcm.Open(nil, iv, ct, ad)
 }
 
+func Aes128CtrEnc(key, pt []byte) ([]byte, []byte, error) {
+	bc, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, nil, err
+	}
+	iv := make([]byte, bc.BlockSize())
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		return nil, nil, err
+	}
+	aesctr := cipher.NewCTR(bc, iv)
+
+	reader := bytes.NewReader(pt)
+	var out bytes.Buffer
+	writer := &cipher.StreamWriter{S: aesctr, W: &out}
+	//stream encryption
+	if _, err := io.Copy(writer, reader); err != nil {
+		return nil, nil, err
+	}
+
+	return iv, out.Bytes(), nil
+}
+
+func Aes128CtrDec(key, iv, ct []byte) ([]byte, error) {
+	bc, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aesctr := cipher.NewCTR(bc, iv)
+
+	reader := bytes.NewReader(ct)
+	var out bytes.Buffer
+	writer := &cipher.StreamWriter{S: aesctr, W: &out}
+	//stream encryption
+	if _, err := io.Copy(writer, reader); err != nil {
+		return nil, err
+	}
+
+	return out.Bytes(), nil
+}
+
+func GenHmacSha3(msg, key []byte) []byte {
+	mac := hmac.New(sha3.New256, key)
+	//stream write
+	mac.Write(msg)
+	return mac.Sum(nil)
+}
+
+func VerifyHmacSha3(msg, msgMac, key []byte) bool {
+	mac := hmac.New(sha3.New256, key)
+	//stream write
+	mac.Write(msg)
+	expectedMac := mac.Sum(nil)
+	return hmac.Equal(msgMac, expectedMac)
+}
+
 func main() {
 
-	//password based encryption
+	//password based encryption:
+	//argon2id + aes-gcm
+	fmt.Println("password based encryption: argon2id + aes-gcm")
 	pwd := "example password"
 	fmt.Println("password: ", pwd)
 
-	pt := "example plain text"
+	pt := "example key data"
 	fmt.Println("plain text: ", pt)
 
 	ad := "example additional data"
@@ -86,4 +146,20 @@ func main() {
 	decPt, _ := Aes128GcmDec(key, iv, ct, []byte(ad))
 	fmt.Println("decrypted plain text: ", string(decPt))
 
+	fmt.Println()
+
+	//stream cipher + mac:
+	//aes-ctr + hmac
+	fmt.Println("stream cipher + mac: aes-ctr + hmac")
+	plainText := "example plain text"
+	fmt.Println("plain text: ", plainText)
+	iv, cipherText, _ := Aes128CtrEnc(key, []byte(plainText))
+	fmt.Println("iv: ", iv)
+	fmt.Println("cipher text: ", cipherText)
+	msgMac := GenHmacSha3(cipherText, key)
+	fmt.Println("hmac-sha3: ", msgMac)
+	success := VerifyHmacSha3(cipherText, msgMac, key)
+	fmt.Println("hmac-sha3 verify: ", success)
+	decPt, _ = Aes128CtrDec(key, iv, cipherText)
+	fmt.Println("decrypted plain text: ", string(decPt))
 }
