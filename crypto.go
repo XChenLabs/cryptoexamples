@@ -6,6 +6,8 @@ import (
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
 	"fmt"
 	"io"
 
@@ -106,16 +108,18 @@ func Aes128CtrDec(key, iv, ct []byte) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-func GenHmacSha3(msg, key []byte) []byte {
+func GenHmacSha3(iv, msg, key []byte) []byte {
 	mac := hmac.New(sha3.New256, key)
 	//stream write
+	mac.Write(iv)
 	mac.Write(msg)
 	return mac.Sum(nil)
 }
 
-func VerifyHmacSha3(msg, msgMac, key []byte) bool {
+func VerifyHmacSha3(iv, msg, msgMac, key []byte) bool {
 	mac := hmac.New(sha3.New256, key)
 	//stream write
+	mac.Write(iv)
 	mac.Write(msg)
 	expectedMac := mac.Sum(nil)
 	return hmac.Equal(msgMac, expectedMac)
@@ -156,10 +160,24 @@ func main() {
 	iv, cipherText, _ := Aes128CtrEnc(key, []byte(plainText))
 	fmt.Println("iv: ", iv)
 	fmt.Println("cipher text: ", cipherText)
-	msgMac := GenHmacSha3(cipherText, key)
+	msgMac := GenHmacSha3(iv, cipherText, key)
 	fmt.Println("hmac-sha3: ", msgMac)
-	success := VerifyHmacSha3(cipherText, msgMac, key)
+	success := VerifyHmacSha3(iv, cipherText, msgMac, key)
 	fmt.Println("hmac-sha3 verify: ", success)
 	decPt, _ = Aes128CtrDec(key, iv, cipherText)
 	fmt.Println("decrypted plain text: ", string(decPt))
+
+	fmt.Println()
+	//RSA encryption
+	fmt.Println("RSA-OAEP encryption: ")
+	rsaMsg := "example rsa message"
+	fmt.Println("rsa plain text: ", rsaMsg)
+	rsaLbl := "example rsa label"
+	fmt.Println("rsa label: ", rsaLbl)
+	rsaKeyPair, _ := rsa.GenerateKey(rand.Reader, 2048)
+	fmt.Println("rsa key pair: ", rsaKeyPair)
+	ciphertext, _ := rsa.EncryptOAEP(sha256.New(), rand.Reader, &rsaKeyPair.PublicKey, []byte(rsaMsg), []byte(rsaLbl))
+	fmt.Println("rsa encrypted message: ", ciphertext)
+	decRsaPt, _ := rsa.DecryptOAEP(sha256.New(), nil, rsaKeyPair, ciphertext, []byte(rsaLbl))
+	fmt.Println("rsa decrypted text: ", string(decRsaPt))
 }
