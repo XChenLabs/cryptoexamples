@@ -6,7 +6,6 @@ import (
 	"crypto/cipher"
 	"crypto/ecdsa"
 	"crypto/ed25519"
-	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
@@ -19,6 +18,8 @@ import (
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/sha3"
 	"golang.org/x/crypto/ssh"
+
+	gethcrypto "github.com/ethereum/go-ethereum/crypto"
 )
 
 const (
@@ -182,18 +183,37 @@ func main() {
 	fmt.Println("rsa decrypted text: ", string(decRsaPt))
 	fmt.Println()
 
-	//ECDSA signature
-	fmt.Println("ECDSA signature: ")
+	//ECDSA secp256k1 bitcoin/eth signature
+	fmt.Println("ECDSA secp256k1 signature: ")
 	ecdsaMsg := "example ecdsa message"
 	fmt.Println("msg: ", ecdsaMsg)
 	hash := sha3.Sum256([]byte(ecdsaMsg))
 	fmt.Println("msg hash: ", hash)
-	ecdsaKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	ecdsaKey, _ := ecdsa.GenerateKey(gethcrypto.S256(), rand.Reader)
 	fmt.Println("ecdsa keypair: ", ecdsaKey)
 	sig, _ := ecdsa.SignASN1(rand.Reader, ecdsaKey, hash[:])
 	fmt.Println("msg sig: ", sig)
 	valid := ecdsa.VerifyASN1(&ecdsaKey.PublicKey, hash[:], sig)
 	fmt.Println("ecdsa verify: ", valid)
+	fmt.Println()
+
+	//store ECDSA secp256k1 key in geth legacy encrypted(insecure) pem format
+	fmt.Println("ECDSA secp256k1 key stored to geth legacy encrypted pem format: ")
+	keyData := gethcrypto.FromECDSA(ecdsaKey)
+	block, _ := x509.EncryptPEMBlock(rand.Reader, "secp256k1 PRIVATE KEY",
+		keyData, []byte(pwd), x509.PEMCipherAES128)
+	pemData := pem.EncodeToMemory(block)
+	fmt.Println("ECDSA secp256k1 private key in geth legacy encrypted pem format: ", string(pemData))
+	block, _ = pem.Decode(pemData)
+	s256KeyData, err := x509.DecryptPEMBlock(block, []byte(pwd))
+	if err != nil {
+		fmt.Println("pem dec: ", err)
+	}
+	s256Key, err := gethcrypto.ToECDSA(s256KeyData)
+	if err != nil {
+		fmt.Println("parse pkcs8: ", err)
+	}
+	fmt.Println("ECDSA secp256k1 decoded key == original key: ", ecdsaKey.Equal(s256Key))
 	fmt.Println()
 
 	//ED25519 signature
@@ -215,14 +235,14 @@ func main() {
 	//(unencrypted because Legacy PEM encryption is NOT secure and pkcs5 not implemented in golang)
 	fmt.Println("ED25519 key stored to pkcs8 pem format: ")
 	edKeyData, _ := x509.MarshalPKCS8PrivateKey(priKey)
-	pemData := pem.EncodeToMemory(
+	pemData = pem.EncodeToMemory(
 		&pem.Block{
 			Type:  "ED25519 PRIVATE KEY",
 			Bytes: edKeyData,
 		},
 	)
 	fmt.Println("ED25519 private key in pkcs8 pem format: ", string(pemData))
-	block, _ := pem.Decode(pemData)
+	block, _ = pem.Decode(pemData)
 	decodedPriKey, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
 	edPriKey := decodedPriKey.(ed25519.PrivateKey)
 	fmt.Println("ED25519 decoded key == original key: ", priKey.Equal(edPriKey))
