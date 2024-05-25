@@ -11,11 +11,14 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"io"
 
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/sha3"
+	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -135,24 +138,18 @@ func main() {
 	fmt.Println("password based encryption: argon2id + aes-gcm")
 	pwd := "example password"
 	fmt.Println("password: ", pwd)
-
 	pt := "example key data"
 	fmt.Println("plain text: ", pt)
-
 	ad := "example additional data"
 	fmt.Println("additional data: ", ad)
-
 	salt, key, _ := PwdToKey(pwd)
 	fmt.Println("salt: ", salt)
 	fmt.Println("key: ", key)
-
 	iv, ct, _ := Aes128GcmEnc(key, []byte(pt), []byte(ad))
 	fmt.Println("iv: ", iv)
 	fmt.Println("cipher text: ", ct)
-
 	decPt, _ := Aes128GcmDec(key, iv, ct, []byte(ad))
 	fmt.Println("decrypted plain text: ", string(decPt))
-
 	fmt.Println()
 
 	//stream cipher + mac:
@@ -169,8 +166,8 @@ func main() {
 	fmt.Println("hmac-sha3 verify: ", success)
 	decPt, _ = Aes128CtrDec(key, iv, cipherText)
 	fmt.Println("decrypted plain text: ", string(decPt))
-
 	fmt.Println()
+
 	//RSA encryption
 	fmt.Println("RSA-OAEP encryption: ")
 	rsaMsg := "example rsa message"
@@ -183,8 +180,8 @@ func main() {
 	fmt.Println("rsa encrypted message: ", ciphertext)
 	decRsaPt, _ := rsa.DecryptOAEP(sha256.New(), nil, rsaKeyPair, ciphertext, []byte(rsaLbl))
 	fmt.Println("rsa decrypted text: ", string(decRsaPt))
-
 	fmt.Println()
+
 	//ECDSA signature
 	fmt.Println("ECDSA signature: ")
 	ecdsaMsg := "example ecdsa message"
@@ -197,8 +194,8 @@ func main() {
 	fmt.Println("msg sig: ", sig)
 	valid := ecdsa.VerifyASN1(&ecdsaKey.PublicKey, hash[:], sig)
 	fmt.Println("ecdsa verify: ", valid)
-
 	fmt.Println()
+
 	//ED25519 signature
 	fmt.Println("ED25519 signature: ")
 	edMsg := "example ed25519 message"
@@ -212,4 +209,32 @@ func main() {
 	fmt.Println("msg sig: ", sig)
 	valid = ed25519.Verify(pubKey, hash[:], sig)
 	fmt.Println("ed25519 verify: ", valid)
+	fmt.Println()
+
+	//store ed25519 key in pkcs8+pem format
+	//(unencrypted because Legacy PEM encryption is NOT secure and pkcs5 not implemented in golang)
+	fmt.Println("ED25519 key stored to pkcs8 pem format: ")
+	edKeyData, _ := x509.MarshalPKCS8PrivateKey(priKey)
+	pemData := pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "ED25519 PRIVATE KEY",
+			Bytes: edKeyData,
+		},
+	)
+	fmt.Println("ED25519 private key in pkcs8 pem format: ", string(pemData))
+	block, _ := pem.Decode(pemData)
+	decodedPriKey, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
+	edPriKey := decodedPriKey.(ed25519.PrivateKey)
+	fmt.Println("ED25519 decoded key == original key: ", priKey.Equal(edPriKey))
+	fmt.Println()
+
+	//store ed25519 key in encrypted openssh pem format
+	fmt.Println("ED25519 key stored to encrypted openssh pem format: ")
+	block, _ = ssh.MarshalPrivateKeyWithPassphrase(priKey, "ed25519", []byte(pwd))
+	pemStr := pem.EncodeToMemory(block)
+	fmt.Println("ED25519 private key in encrypted openssh pem format: ", string(pemStr))
+	//block, _ = pem.Decode(pemStr)
+	tmpKeyData, _ := ssh.ParseRawPrivateKeyWithPassphrase(pemStr, []byte(pwd))
+	edPriKeyP := tmpKeyData.(*ed25519.PrivateKey)
+	fmt.Println("ED25519 decoded key == original key: ", priKey.Equal(*edPriKeyP))
 }
