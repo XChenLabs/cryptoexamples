@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/rand"
@@ -189,11 +188,15 @@ func main() {
 	fmt.Println("msg: ", ecdsaMsg)
 	hash := sha3.Sum256([]byte(ecdsaMsg))
 	fmt.Println("msg hash: ", hash)
-	ecdsaKey, _ := ecdsa.GenerateKey(gethcrypto.S256(), rand.Reader)
+	ecdsaKey, _ := gethcrypto.GenerateKey()
 	fmt.Println("ecdsa keypair: ", ecdsaKey)
-	sig, _ := ecdsa.SignASN1(rand.Reader, ecdsaKey, hash[:])
+	sig, _ := gethcrypto.Sign(hash[:], ecdsaKey)
 	fmt.Println("msg sig: ", sig)
-	valid := ecdsa.VerifyASN1(&ecdsaKey.PublicKey, hash[:], sig)
+	s256PubKey, err := gethcrypto.SigToPub(hash[:], sig)
+	if err != nil {
+		fmt.Println("ecrecover error: ", err)
+	}
+	valid := s256PubKey.Equal(&ecdsaKey.PublicKey)
 	fmt.Println("ecdsa verify: ", valid)
 	fmt.Println()
 
