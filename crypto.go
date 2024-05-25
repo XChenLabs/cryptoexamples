@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
@@ -180,4 +183,33 @@ func main() {
 	fmt.Println("rsa encrypted message: ", ciphertext)
 	decRsaPt, _ := rsa.DecryptOAEP(sha256.New(), nil, rsaKeyPair, ciphertext, []byte(rsaLbl))
 	fmt.Println("rsa decrypted text: ", string(decRsaPt))
+
+	fmt.Println()
+	//ECDSA signature
+	fmt.Println("ECDSA signature: ")
+	ecdsaMsg := "example ecdsa message"
+	fmt.Println("msg: ", ecdsaMsg)
+	hash := sha3.Sum256([]byte(ecdsaMsg))
+	fmt.Println("msg hash: ", hash)
+	ecdsaKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	fmt.Println("ecdsa keypair: ", ecdsaKey)
+	sig, _ := ecdsa.SignASN1(rand.Reader, ecdsaKey, hash[:])
+	fmt.Println("msg sig: ", sig)
+	valid := ecdsa.VerifyASN1(&ecdsaKey.PublicKey, hash[:], sig)
+	fmt.Println("ecdsa verify: ", valid)
+
+	fmt.Println()
+	//ED25519 signature
+	fmt.Println("ED25519 signature: ")
+	edMsg := "example ed25519 message"
+	fmt.Println("msg: ", ecdsaMsg)
+	hash = sha3.Sum256([]byte(edMsg))
+	fmt.Println("msg hash: ", hash)
+	pubKey, priKey, _ := ed25519.GenerateKey(rand.Reader)
+	fmt.Println("ed25519 pubkey: ", pubKey)
+	fmt.Println("ed25519 prikey: ", priKey)
+	sig = ed25519.Sign(priKey, hash[:])
+	fmt.Println("msg sig: ", sig)
+	valid = ed25519.Verify(pubKey, hash[:], sig)
+	fmt.Println("ed25519 verify: ", valid)
 }
