@@ -19,6 +19,8 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	gethcrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/prysmaticlabs/prysm/v5/crypto/bls"
+	"github.com/prysmaticlabs/prysm/v5/crypto/bls/common"
 )
 
 const (
@@ -260,4 +262,42 @@ func main() {
 	tmpKeyData, _ := ssh.ParseRawPrivateKeyWithPassphrase(pemStr, []byte(pwd))
 	edPriKeyP := tmpKeyData.(*ed25519.PrivateKey)
 	fmt.Println("ED25519 decoded key == original key: ", priKey.Equal(*edPriKeyP))
+	fmt.Println()
+
+	//bls signature
+	fmt.Println("bls signature: ")
+	blsMsg := "example bls message"
+	fmt.Println("bls msg: ", blsMsg)
+	blsMsgHash := sha3.Sum256([]byte(blsMsg))
+	fmt.Println("bls msg hash: ", blsMsgHash)
+	blsSigs := make([]common.Signature, 3)
+	blsKeys := make([]common.SecretKey, 3)
+	blsPubKeys := make([]common.PublicKey, 3)
+	blsKeys[0], _ = bls.RandKey()
+	blsPubKeys[0] = blsKeys[0].PublicKey()
+	blsSigs[0] = blsKeys[0].Sign(blsMsgHash[:])
+	blsKeys[1], _ = bls.RandKey()
+	blsPubKeys[1] = blsKeys[1].PublicKey()
+	blsSigs[1] = blsKeys[1].Sign(blsMsgHash[:])
+	blsKeys[2], _ = bls.RandKey()
+	blsPubKeys[2] = blsKeys[2].PublicKey()
+	blsSigs[2] = blsKeys[2].Sign(blsMsgHash[:])
+	for i := 0; i < 3; i++ {
+		fmt.Println("--------------------------")
+		fmt.Println("bls keys: ", i, blsKeys[i].Marshal())
+		fmt.Println("bls pub keys: ", i, blsPubKeys[i].Marshal())
+		fmt.Println("bls signatures: ", i, blsSigs[i].Marshal())
+		fmt.Println("--------------------------")
+	}
+	//aggregate signatures
+	blsAggSig := bls.AggregateSignatures(blsSigs)
+	fmt.Println("bls aggregated signature: ", blsAggSig.Marshal())
+	//aggregate public keys
+	blsAggPubKey := bls.AggregateMultiplePubkeys(blsPubKeys)
+	fmt.Println("bls aggregated pubkey: ", blsAggPubKey.Marshal())
+	//verify agg sigs
+	verify := blsAggSig.Verify(blsAggPubKey, blsMsgHash[:])
+	fmt.Println("bls signature verify: ", verify)
+	verifyMultiple := blsAggSig.FastAggregateVerify(blsPubKeys, blsMsgHash)
+	fmt.Println("bls signature verify multiple: ", verifyMultiple)
 }
