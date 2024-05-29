@@ -1,4 +1,4 @@
-module example/crypto
+module github.com/XChenLabs/cryptoexamples
 
 go 1.21.8
 
